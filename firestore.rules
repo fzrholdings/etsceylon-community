@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(resourceData) {
+      return isSignedIn() && resourceData.uid == request.auth.uid;
+    }
+
+    function onlyCountFieldsChanged() {
+      // Only permit changes to likeCount and/or commentCount.
+      return request.resource.data.diff(resource.data).changedKeys()
+        .hasOnly(['likeCount', 'commentCount']);
+    }
+
+    function countsChangeByAtMostOne() {
+      // Require counts to move by -1, 0, or +1 and stay non-negative.
+      let oldLike = resource.data.likeCount;
+      let newLike = request.resource.data.likeCount;
+      let oldComment = resource.data.commentCount;
+      let newComment = request.resource.data.commentCount;
+
+      return newLike is int
+        && newComment is int
+        && newLike >= 0
+        && newComment >= 0
+        && (newLike == oldLike || newLike == oldLike + 1 || newLike == oldLike - 1)
+        && (newComment == oldComment || newComment == oldComment + 1 || newComment == oldComment - 1);
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+
+      // Anyone signed-in anonymously can create, but with size limits.
+      allow create: if isSignedIn()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.text is string
+        && request.resource.data.text.size() <= 4000
+        && (!('imageUrl' in request.resource.data) || request.resource.data.imageUrl is string)
+        && (!('imageDeleteUrl' in request.resource.data) || request.resource.data.imageDeleteUrl is string)
+        && request.resource.data.likeCount == 0
+        && request.resource.data.commentCount == 0;
+
+      // Only owner can delete their post.
+      allow delete: if isOwner(resource.data);
+
+      // Only allow server/client increments on counts and no editing of text/image (keep simple + abuse-resistant).
+      allow update: if isSignedIn()
+        && onlyCountFieldsChanged()
+        && countsChangeByAtMostOne();
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isSignedIn()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() <= 800;
+        allow update, delete: if false;
+      }
+
+      match /likes/{likeId} {
+        allow read: if false; // we don't need to list who liked
+        allow create: if isSignedIn()
+          && likeId == request.auth.uid;
+        allow delete: if isSignedIn()
+          && likeId == request.auth.uid;
+        allow update: if false;
+      }
+    }
+  }
+}
+

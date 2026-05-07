@@ -1,0 +1,171 @@
+:root{
+  --bg:#0b1220;
+  --panel:#0f1a33;
+  --text:#e9eefc;
+  --muted:#a8b3d6;
+  --line:rgba(255,255,255,.08);
+  --brand:#4da3ff;
+  --danger:#ff4d6d;
+  --ok:#41d38f;
+}
+
+*{ box-sizing:border-box; }
+html,body{ height:100%; }
+body{
+  margin:0;
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Noto Sans", "Helvetica Neue", sans-serif;
+  color:var(--text);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, rgba(77,163,255,.22), transparent 60%),
+    radial-gradient(900px 500px at 100% 10%, rgba(65,211,143,.16), transparent 55%),
+    var(--bg);
+}
+
+a{ color:inherit; }
+.container{ max-width: 960px; margin: 0 auto; padding: 24px 16px; }
+.topbar{
+  display:flex; gap:12px; align-items:center; justify-content:space-between;
+  padding: 14px 16px;
+  background: rgba(15,26,51,.8);
+  border-bottom:1px solid var(--line);
+  position: sticky; top:0; backdrop-filter: blur(8px);
+}
+.brand{
+  display:flex; gap:10px; align-items:center;
+  font-weight:700;
+  letter-spacing:.2px;
+}
+.brand-badge{
+  width:34px; height:34px; border-radius:10px;
+  background: linear-gradient(135deg, rgba(77,163,255,.95), rgba(65,211,143,.85));
+  box-shadow: 0 10px 26px rgba(0,0,0,.35);
+}
+.nav{ display:flex; gap:10px; flex-wrap:wrap; }
+.nav a{
+  text-decoration:none;
+  color:var(--muted);
+  padding:8px 10px;
+  border-radius:10px;
+}
+.nav a.active, .nav a:hover{
+  color:var(--text);
+  background: rgba(255,255,255,.06);
+}
+
+.grid{
+  display:grid;
+  grid-template-columns: 1fr;
+  gap: 14px;
+}
+
+.card{
+  background: rgba(15,26,51,.85);
+  border:1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  box-shadow: 0 12px 30px rgba(0,0,0,.22);
+}
+.card h2{ margin:0 0 8px 0; font-size: 18px; }
+.muted{ color:var(--muted); }
+.row{ display:flex; gap:10px; align-items:center; }
+.row-between{ display:flex; gap:10px; align-items:center; justify-content:space-between; }
+
+textarea, input[type="text"]{
+  width:100%;
+  background: rgba(0,0,0,.18);
+  color:var(--text);
+  border:1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 12px;
+  outline:none;
+}
+textarea{ resize: vertical; min-height: 80px; }
+
+button{
+  border:0;
+  background: rgba(255,255,255,.10);
+  color: var(--text);
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor:pointer;
+}
+button.primary{ background: rgba(77,163,255,.22); border:1px solid rgba(77,163,255,.35); }
+button.primary:hover{ background: rgba(77,163,255,.28); }
+button.danger{ background: rgba(255,77,109,.18); border:1px solid rgba(255,77,109,.35); }
+button:disabled{ opacity:.55; cursor:not-allowed; }
+
+.pill{
+  display:inline-flex; align-items:center; gap:8px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  border:1px solid var(--line);
+  background: rgba(0,0,0,.14);
+  color: var(--muted);
+}
+
+.feed-item{ display:grid; gap:10px; }
+.feed-meta{
+  display:flex; gap:10px; align-items:center; flex-wrap:wrap;
+  color: var(--muted); font-size: 12px;
+}
+.feed-text{ white-space: pre-wrap; line-height: 1.45; }
+.feed-img{
+  width:100%;
+  border-radius: 14px;
+  border:1px solid var(--line);
+  max-height: 520px;
+  object-fit: cover;
+  background: rgba(0,0,0,.18);
+}
+.actions{
+  display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+}
+.actions button{
+  padding: 8px 10px;
+  border-radius: 999px;
+}
+.divider{ height:1px; background: var(--line); margin: 10px 0; }
+
+.toast{
+  position: fixed;
+  left: 16px;
+  bottom: 16px;
+  max-width: min(520px, calc(100vw - 32px));
+  background: rgba(15,26,51,.92);
+  border:1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 16px 40px rgba(0,0,0,.4);
+  display:none;
+}
+.toast.show{ display:block; }
+.toast strong{ display:block; margin-bottom: 4px; }
+
+.modal-backdrop{
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.58);
+  display:none;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-backdrop.show{ display:flex; }
+.modal{
+  width: min(900px, 100%);
+  max-height: min(92vh, 980px);
+  overflow:auto;
+  border-radius: 16px;
+  background: rgba(15,26,51,.95);
+  border:1px solid var(--line);
+  box-shadow: 0 20px 60px rgba(0,0,0,.55);
+  padding: 14px;
+}
+.comment{
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(0,0,0,.12);
+}
+.comment .meta{ font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+
