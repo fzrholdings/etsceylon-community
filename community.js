@@ -1,95 +1,373 @@
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Community • ETS Ceylon FM</title>
-    <link rel="stylesheet" href="./styles.css" />
-  </head>
-  <body>
-    <div class="topbar">
-      <div class="brand">
-        <div class="brand-badge" aria-hidden="true"></div>
-        <div>
-          ETS Ceylon FM
-          <div class="muted" style="font-weight:500;font-size:12px;">Community</div>
-        </div>
-      </div>
-      <div class="nav">
-        <a href="./index.html">Home</a>
-        <a class="active" href="./community.html">Community</a>
-      </div>
-    </div>
+import { uploadToImgbb } from "./imgbb.js";
 
-    <div class="container">
-      <div class="grid">
-        <div class="card" id="setupCard">
-          <h2>Setup status</h2>
-          <div class="muted" id="setupStatus">Loading…</div>
-          <div class="divider"></div>
-          <div class="muted">
-            If this is your first time: fill `public/firebase-config.js` and `public/imgbb.js`.
-          </div>
-        </div>
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.13.0/firebase-app.js";
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInAnonymously,
+} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-auth.js";
+import {
+  getFirestore,
+  collection,
+  addDoc,
+  serverTimestamp,
+  query,
+  orderBy,
+  limit,
+  onSnapshot,
+  doc,
+  getDoc,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  increment,
+} from "https://www.gstatic.com/firebasejs/12.13.0/firebase-firestore.js";
 
-        <div class="card" id="composerCard" style="display:none;">
-          <div class="row-between">
-            <h2 style="margin:0;">Create a post</h2>
-            <span class="pill" id="meBadge">Anonymous</span>
-          </div>
-          <div class="divider"></div>
+const el = (id) => document.getElementById(id);
 
-          <label class="muted" for="postText">Text</label>
-          <textarea id="postText" placeholder="Share your ETS2 screenshot story, ask a question, convoy info, etc."></textarea>
+const setupStatus = el("setupStatus");
+const composerCard = el("composerCard");
+const meBadge = el("meBadge");
+const feed = el("feed");
+const feedEmpty = el("feedEmpty");
+const feedHint = el("feedHint");
 
-          <div style="height:10px;"></div>
-          <div class="row" style="flex-wrap:wrap;">
-            <input type="file" id="postImage" accept="image/*" />
-            <button class="primary" id="postBtn">Post</button>
-            <button id="clearBtn">Clear</button>
-          </div>
-          <div class="muted" id="uploadHint" style="margin-top:10px; display:none;"></div>
-        </div>
+const postText = el("postText");
+const postImage = el("postImage");
+const postBtn = el("postBtn");
+const clearBtn = el("clearBtn");
+const uploadHint = el("uploadHint");
 
-        <div class="card">
-          <div class="row-between">
-            <h2 style="margin:0;">Latest posts</h2>
-            <span class="muted" id="feedHint"></span>
-          </div>
-          <div class="divider"></div>
-          <div id="feed" class="grid"></div>
-          <div class="muted" id="feedEmpty" style="display:none;">No posts yet. Be the first.</div>
-        </div>
-      </div>
-    </div>
+const toast = el("toast");
+const toastTitle = el("toastTitle");
+const toastMsg = el("toastMsg");
 
-    <div class="toast" id="toast">
-      <strong id="toastTitle"></strong>
-      <div id="toastMsg" class="muted"></div>
-    </div>
+const modalBackdrop = el("modalBackdrop");
+const closeModalBtn = el("closeModalBtn");
+const modalPost = el("modalPost");
+const comments = el("comments");
+const commentsEmpty = el("commentsEmpty");
+const commentText = el("commentText");
+const commentBtn = el("commentBtn");
 
-    <div class="modal-backdrop" id="modalBackdrop" aria-hidden="true">
-      <div class="modal" role="dialog" aria-modal="true" aria-label="Post details">
-        <div class="row-between">
-          <h2 style="margin:0;">Post</h2>
-          <button id="closeModalBtn">Close</button>
-        </div>
-        <div class="divider"></div>
-        <div id="modalPost"></div>
-        <div class="divider"></div>
-        <h2 style="margin:0 0 8px 0; font-size:16px;">Comments</h2>
-        <div class="row" style="flex-wrap:wrap;">
-          <input type="text" id="commentText" placeholder="Write a comment (anonymous)" />
-          <button class="primary" id="commentBtn">Comment</button>
-        </div>
-        <div style="height:10px;"></div>
-        <div id="comments" class="grid"></div>
-        <div class="muted" id="commentsEmpty" style="display:none;">No comments yet.</div>
-      </div>
-    </div>
+let auth = null;
+let db = null;
+let uid = null;
+let selectedPostId = null;
+let stopCommentsUnsub = null;
 
-    <script src="./firebase-config.js"></script>
-    <script type="module" src="./community.js"></script>
-  </body>
-</html>
+function showToast(title, msg) {
+  toastTitle.textContent = title;
+  toastMsg.textContent = msg || "";
+  toast.classList.add("show");
+  window.clearTimeout(showToast._t);
+  showToast._t = window.setTimeout(() => toast.classList.remove("show"), 3800);
+}
 
+function prettyTime(ts) {
+  if (!ts) return "just now";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  const diff = Date.now() - d.getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  const days = Math.floor(h / 24);
+  return `${days}d ago`;
+}
+
+function canStart() {
+  const cfg = window.__FIREBASE_CONFIG__;
+  if (!cfg || typeof cfg !== "object")
+    return { ok: false, why: "Missing Firebase config in firebase-config.js" };
+  const required = ["apiKey", "authDomain", "projectId", "appId"];
+  for (const k of required) {
+    if (!cfg[k] || cfg[k] === "PASTE_ME")
+      return { ok: false, why: `Firebase config missing: ${k}` };
+  }
+  return { ok: true };
+}
+
+function safeText(s) {
+  return (s || "").toString().slice(0, 4000);
+}
+
+function openModal() {
+  modalBackdrop.classList.add("show");
+  modalBackdrop.setAttribute("aria-hidden", "false");
+}
+function closeModal() {
+  modalBackdrop.classList.remove("show");
+  modalBackdrop.setAttribute("aria-hidden", "true");
+  modalPost.innerHTML = "";
+  comments.innerHTML = "";
+  commentsEmpty.style.display = "none";
+  commentText.value = "";
+  selectedPostId = null;
+  if (stopCommentsUnsub) {
+    stopCommentsUnsub();
+    stopCommentsUnsub = null;
+  }
+}
+
+closeModalBtn.addEventListener("click", closeModal);
+modalBackdrop.addEventListener("click", (e) => {
+  if (e.target === modalBackdrop) closeModal();
+});
+
+async function ensureAuth() {
+  const cfg = window.__FIREBASE_CONFIG__;
+  const app = initializeApp(cfg);
+  auth = getAuth(app);
+  db = getFirestore(app);
+
+  await new Promise((resolve, reject) => {
+    const unsub = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          uid = user.uid;
+          meBadge.textContent = `Anonymous • ${uid.slice(0, 6)}`;
+          composerCard.style.display = "";
+          setupStatus.textContent = "Connected.";
+          unsub();
+          resolve();
+          return;
+        }
+        await signInAnonymously(auth);
+      } catch (err) {
+        unsub();
+        reject(err);
+      }
+    });
+  });
+}
+
+function renderPostCard(id, data) {
+  const wrap = document.createElement("div");
+  wrap.className = "card feed-item";
+
+  const meta = document.createElement("div");
+  meta.className = "feed-meta";
+  meta.textContent = `Anonymous • ${prettyTime(data.createdAt)} • likes ${data.likeCount || 0} • comments ${data.commentCount || 0}`;
+
+  const text = document.createElement("div");
+  text.className = "feed-text";
+  text.textContent = data.text || "";
+
+  wrap.appendChild(meta);
+  if (data.text) wrap.appendChild(text);
+
+  if (data.imageUrl) {
+    const img = document.createElement("img");
+    img.className = "feed-img";
+    img.loading = "lazy";
+    img.alt = "ETS2 community post image";
+    img.src = data.imageUrl;
+    wrap.appendChild(img);
+  }
+
+  const actions = document.createElement("div");
+  actions.className = "actions";
+
+  const likeBtn = document.createElement("button");
+  likeBtn.textContent = "Like";
+  likeBtn.addEventListener("click", () => toggleLike(id));
+
+  const commentOpenBtn = document.createElement("button");
+  commentOpenBtn.textContent = "Open";
+  commentOpenBtn.addEventListener("click", () => openPost(id));
+
+  actions.appendChild(likeBtn);
+  actions.appendChild(commentOpenBtn);
+
+  if (data.uid === uid) {
+    const delBtn = document.createElement("button");
+    delBtn.className = "danger";
+    delBtn.textContent = "Delete";
+    delBtn.addEventListener("click", () => deleteMyPost(id));
+    actions.appendChild(delBtn);
+  }
+
+  wrap.appendChild(actions);
+  return wrap;
+}
+
+async function toggleLike(postId) {
+  try {
+    const likeRef = doc(db, "posts", postId, "likes", uid);
+    const postRef = doc(db, "posts", postId);
+    const snap = await getDoc(likeRef);
+    if (snap.exists()) {
+      await deleteDoc(likeRef);
+      await updateDoc(postRef, { likeCount: increment(-1) });
+      showToast("Updated", "Like removed.");
+    } else {
+      await setDoc(likeRef, { createdAt: serverTimestamp() });
+      await updateDoc(postRef, { likeCount: increment(1) });
+      showToast("Updated", "Liked.");
+    }
+  } catch (e) {
+    showToast("Error", e?.message || "Like failed.");
+  }
+}
+
+async function deleteMyPost(postId) {
+  try {
+    const postRef = doc(db, "posts", postId);
+    const snap = await getDoc(postRef);
+    if (!snap.exists()) return;
+    const data = snap.data();
+    if (data.uid !== uid) {
+      showToast("Not allowed", "You can delete only your own posts.");
+      return;
+    }
+    await deleteDoc(postRef);
+    showToast("Deleted", "Post deleted.");
+  } catch (e) {
+    showToast("Error", e?.message || "Delete failed.");
+  }
+}
+
+async function openPost(postId) {
+  selectedPostId = postId;
+  openModal();
+  modalPost.innerHTML = "";
+  comments.innerHTML = "";
+
+  const postRef = doc(db, "posts", postId);
+  const snap = await getDoc(postRef);
+  if (!snap.exists()) {
+    modalPost.innerHTML = `<div class="muted">Post not found.</div>`;
+    return;
+  }
+  const data = snap.data();
+  modalPost.appendChild(renderPostCard(postId, data));
+
+  const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "desc"), limit(60));
+  stopCommentsUnsub = onSnapshot(q, (qs) => {
+    comments.innerHTML = "";
+    let n = 0;
+    qs.forEach((d) => {
+      n++;
+      const c = d.data();
+      const node = document.createElement("div");
+      node.className = "comment";
+      node.innerHTML = `
+        <div class="meta">Anonymous • ${prettyTime(c.createdAt)}</div>
+        <div style="white-space:pre-wrap; line-height:1.45;"></div>
+      `;
+      node.querySelector("div:last-child").textContent = c.text || "";
+      comments.appendChild(node);
+    });
+    commentsEmpty.style.display = n ? "none" : "";
+  });
+}
+
+commentBtn.addEventListener("click", async () => {
+  const text = safeText(commentText.value).trim();
+  if (!selectedPostId) return;
+  if (!text) {
+    showToast("Missing", "Write a comment first.");
+    return;
+  }
+  commentBtn.disabled = true;
+  try {
+    await addDoc(collection(db, "posts", selectedPostId, "comments"), {
+      text,
+      uid,
+      createdAt: serverTimestamp(),
+    });
+    await updateDoc(doc(db, "posts", selectedPostId), { commentCount: increment(1) });
+    commentText.value = "";
+  } catch (e) {
+    showToast("Error", e?.message || "Comment failed.");
+  } finally {
+    commentBtn.disabled = false;
+  }
+});
+
+clearBtn.addEventListener("click", () => {
+  postText.value = "";
+  postImage.value = "";
+  uploadHint.style.display = "none";
+  uploadHint.textContent = "";
+});
+
+postBtn.addEventListener("click", async () => {
+  const text = safeText(postText.value).trim();
+  const file = postImage.files?.[0] || null;
+
+  if (!text && !file) {
+    showToast("Missing", "Write text or select an image.");
+    return;
+  }
+
+  postBtn.disabled = true;
+  clearBtn.disabled = true;
+  uploadHint.style.display = "";
+  uploadHint.textContent = file ? "Uploading image…" : "Posting…";
+
+  try {
+    let imageUrl = null;
+    let imageDeleteUrl = null;
+    if (file) {
+      const up = await uploadToImgbb(file);
+      imageUrl = up.url;
+      imageDeleteUrl = up.deleteUrl;
+    }
+
+    await addDoc(collection(db, "posts"), {
+      uid,
+      text,
+      imageUrl,
+      imageDeleteUrl,
+      likeCount: 0,
+      commentCount: 0,
+      createdAt: serverTimestamp(),
+    });
+
+    postText.value = "";
+    postImage.value = "";
+    uploadHint.style.display = "none";
+    uploadHint.textContent = "";
+    showToast("Posted", "Your post is live.");
+  } catch (e) {
+    showToast("Error", e?.message || "Post failed.");
+  } finally {
+    postBtn.disabled = false;
+    clearBtn.disabled = false;
+  }
+});
+
+function startFeed() {
+  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"), limit(50));
+  feedHint.textContent = "Auto-updating";
+  onSnapshot(q, (qs) => {
+    feed.innerHTML = "";
+    let n = 0;
+    qs.forEach((d) => {
+      n++;
+      feed.appendChild(renderPostCard(d.id, d.data()));
+    });
+    feedEmpty.style.display = n ? "none" : "";
+  });
+}
+
+(async function main() {
+  const ready = canStart();
+  if (!ready.ok) {
+    setupStatus.textContent = ready.why;
+    showToast("Setup needed", ready.why);
+    return;
+  }
+
+  try {
+    setupStatus.textContent = "Connecting to Firebase…";
+    await ensureAuth();
+    startFeed();
+  } catch (e) {
+    setupStatus.textContent = e?.message || "Failed to connect.";
+    showToast("Error", e?.message || "Failed to connect.");
+  }
+})();
